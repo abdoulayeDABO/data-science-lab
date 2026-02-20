@@ -1,0 +1,27 @@
+{
+    "id": "31B0376E",
+    "path": "~/Bureau/Abdoulaye/python/data-science-lab/R/diabetes_knn_app/deploy.R",
+    "project_path": "deploy.R",
+    "type": "r_source",
+    "hash": "1149945010",
+    "contents": "",
+    "dirty": false,
+    "created": 1771368838323.0,
+    "source_on_save": false,
+    "relative_order": 3,
+    "properties": {
+        "tempName": "Untitled1",
+        "source_window_id": "",
+        "Source": "Source",
+        "cursorPosition": "2,0",
+        "scrollLine": "0"
+    },
+    "folds": "",
+    "lastKnownWriteTime": 1771369344,
+    "encoding": "UTF-8",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1771369344083,
+    "read_only": false,
+    "read_only_alternatives": []
+}

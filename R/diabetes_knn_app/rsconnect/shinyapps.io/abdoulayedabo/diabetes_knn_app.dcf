@@ -1,0 +1,10 @@
+name: diabetes_knn_app
+title:
+username: abdoulayedabo
+account: abdoulayedabo
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 16698237
+bundleId: 11595408
+url: https://abdoulayedabo.shinyapps.io/diabetes_knn_app/
+version: 1

@@ -1,0 +1,98 @@
+library(mlr)
+library(tidyverse)
+
+install.packages("titanic")
+data(titanic_train, package = "titanic")
+titanicTib <- as_tibble(titanic_train)
+head(titanicTib)
+
+# Cleaning Titanic data, ready for modeling
+fctrs <- c("Survived", "Sex", "Pclass")
+titanicClean <- titanicTib %>%
+  mutate_at(.vars = fctrs, .funs = factor) %>%
+  mutate(FamSize = SibSp + Parch) %>%
+  select(Survived, Pclass, Sex, Age, Fare, FamSize)
+titanicClean
+
+# titanicClean <- titanicTib %>%
+#   mutate(
+#     across(all_of(fctrs), factor),
+#     FamSize = SibSp + Parch
+#   ) %>%
+#   select(Survived, Pclass, Sex, Age, Fare, FamSize)
+
+titanicUntidy <- gather(titanicClean, key = "Variable", value = "Value", -Survived)
+titanicUntidy
+
+titanicUntidy %>%
+  filter(Variable != "Pclass" & Variable != "Sex") %>%
+  ggplot(aes(Survived, as.numeric(Value))) +
+  facet_wrap(~ Variable, scales = "free_y") +
+  geom_violin(draw_quantiles = c(0.25, 0.5, 0.75)) +
+  theme_bw()
+
+titanicUntidy %>%
+  filter(Variable == "Pclass" | Variable == "Sex") %>%
+  ggplot(aes(Value, fill = Survived)) +
+  facet_wrap(~ Variable, scales = "free_x") +
+  geom_bar(position = "dodge") +
+  theme_bw()
+
+titanicUntidy %>%
+  filter(Variable == "Pclass" | Variable == "Sex") %>%
+  ggplot(aes(Value, fill = Survived)) +
+  facet_wrap(~ Variable, scales = "free_x") +
+  geom_bar(position = "stack") +
+  theme_bw()
+
+titanicUntidy %>%
+  filter(Variable == "Pclass" | Variable == "Sex") %>%
+  ggplot(aes(Value, fill = Survived)) +
+  facet_wrap(~ Variable, scales = "free_x") +
+  geom_bar(position = "fill") +
+  theme_bw()
+
+titanicClean$Age[1:60]
+sum(is.na(titanicClean$Age))
+
+###########################
+# Dealing with missing data
+###########################
+
+imp <- impute(titanicClean, cols = list(Age = imputeMean()))
+sum(is.na(imp$data$Age))
+  
+
+###################################
+# Building a machine learning model
+###################################
+
+titanicTask <- makeClassifTask(data = imp$data, target = "Survived")
+logReg <- makeLearner("classif.logreg", predict.type = "prob")
+logRegModel <- train(logReg, titanicTask)
+
+# CV
+logRegWrapper <- makeImputeWrapper("classif.logreg", cols = list(Age = imputeMean()))
+kFold <- makeResampleDesc(method = "RepCV", folds = 10, reps = 50, stratify = TRUE)
+logRegwithImpute <- resample(logRegWrapper, titanicTask,
+                            resampling = kFold,
+                             measures = list(acc, fpr, fnr))
+# logRegwithImpute
+
+# Extracting model parameters
+logRegModelData <- getLearnerModel(logRegModel)
+coef(logRegModelData)
+
+# Converting model parameters into odds ratios
+exp(cbind(Odds_Ratio = coef(logRegModelData), confint(logRegModelData)))
+
+
+# Using our model to make predictions on new data
+data(titanic_test, package = "titanic")
+titanicNew <- as_tibble(titanic_test)
+titanicNewClean <- titanicNew %>%
+  mutate_at(.vars = c("Sex", "Pclass"), .funs = factor) %>%
+  mutate(FamSize = SibSp + Parch) %>%
+  select(Pclass, Sex, Age, Fare, FamSize)
+
+predict(logRegModel, newdata = titanicNewClean)
