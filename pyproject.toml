@@ -5,11 +5,15 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
+    "geodatasets>=2026.1.0",
+    "geopandas>=1.1.2",
     "jupyter>=1.1.1",
     "librosa>=0.11.0",
+    "marimo>=0.20.1",
     "matplotlib>=3.10.7",
     "mglearn>=0.2.0",
     "numpy>=2.2.6",
+    "opencv-python>=4.13.0.92",
     "openpyxl>=3.1.5",
     "pandas>=2.3.3",
     "scikit-learn>=1.7.2",
@@ -17,4 +21,5 @@ dependencies = [
     "seaborn>=0.13.2",
     "sounddevice>=0.5.5",
     "soundfile>=0.13.1",
+    "xlrd>=2.0.2",
 ]

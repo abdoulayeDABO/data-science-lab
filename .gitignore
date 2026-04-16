@@ -16,4 +16,13 @@ __pycache__/
 
 # Draft files
 tps/
+models/
+*.docx
+*.html
+*.pdf
+
+.Rproj.user
+
+*.wav
+*.mp3
 

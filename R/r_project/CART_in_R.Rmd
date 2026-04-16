@@ -1,0 +1,271 @@
+---
+title: "Classification and Regression Trees (CART) in R"
+author: "Camelia Guild"
+date: "8/28/2021"
+output:
+  word_document: default
+  html_document: default
+---
+
+## Introduction
+
+Tree-based methods for classification and regression involve stratifying or segmenting the predictor space into a number of simple regions. These types of approaches are known as **decision tree methods** and can be applied to both regression and classification problems. When we are predicting a quantitative response (i.e., estimating a numeric value), we use a **regression tree**. When we are predicting a qualitative response (i.e., classifying an observation), we use a **classification tree**. Decision trees are non-parametric methods to partition the data into smaller, more "pure" or homogeneous groups called **nodes**. A simple way to define purity in classification is by maximizing accuracy or equivalently by minimizing misclassification error. That is, the nodes of the split will contain a larger proportion of one class in each node. This is accomplished by stating each node as an if/then rule. Cases satisfying the if/then statement are placed in the node. For each split, two determinations are made: the predictor variable used for the split, called the **splitting variable**, and the set of values for the predictor variable (which are split between the left node and the right node), called the **split point**. For the regression problem, we want to minimize the mean square error (MSE).
+
+When would you use a CART model rather than a standard linear regression model (LM), a generalized linear model (GLM), or a generalized additive model (GAM)? The recursive structure of CART models is ideal for uncovering complex dependencies among predictor variables. If a response variable depends strongly on a predictor variable in a nonlinear fashion, then a CART model will be better at detecting this relationship than the use of interaction terms in LMs, GLMs, or GAMs. When there is good reason to suspect non-additive interactions among variables, or there are far too many variables to consider, try a decision tree model. As an example, we will use the `Carseats` data set found in the `ISLR` package. In **Part I** we will fit a classification tree model and, **Part II** we will fit a regression tree model.
+
+**Load packages and look at the data.**
+
+```{r message=FALSE, warning=FALSE}
+# For decision tree model
+library(rpart)
+# For data visualization
+library(rpart.plot)
+# Contains the data
+library(ISLR)
+# Get the list of data sets contained in package
+d <- data(package = "ISLR")
+d$results[, "Item"]
+```
+
+```{r}
+data(Carseats)
+# Get the variable names
+names(Carseats)
+```
+
+```{r}
+dim(Carseats)
+```
+
+------------------------------------------------------------------------
+
+## Part I: Fit A Classification Tree
+
+We will use a classification tree to analyze the `Carseats` data set, a simulated data set containing sales of child car seats at 400 different stores. There are 400 observations and 11 variables in the data set. We are interested in predicting `Sales` based on the other variables in the data set. However, since `Sales` is a continuous variable, we need to recode it as a binary variable. This new variable, `High`, takes on a value of `Yes` if the `Sales` variable exceeds 8, and `No` otherwise. Because `High` is a binary variable, this is a classification problem and requires the use of a classification tree.
+
+```{r}
+# Creates a new binary variable, High.
+High = ifelse(Carseats$Sales <= 8, "No", "Yes")
+# Add High to the data set.
+Carseats = data.frame(Carseats, High)
+# Remove the Sales variable from the data.
+Carseats.H <- Carseats[, -1]
+# Code High as a factor variable
+Carseats.H$High = as.factor(Carseats$High)
+class(Carseats.H$High)
+```
+
+A good classifier is one for which the test error rate is smallest. To properly evaluate the performance of a classification tree, we must estimate the test error rather than simply computing the training error. We would then compare the test error rate for the competing models. Thus, we split the data into a training set and a test set, build the tree using the training set and evaluate its performance on the test data. Later, we will use the `predict()` function for this purpose. In the case of a classification tree, the argument `type="class"` instructs R to return the actual class prediction.
+
+```{r}
+set.seed(234)
+train = sample(1:nrow(Carseats.H), 200)
+Carseats.train = Carseats.H[train, ]
+Carseats.test  = Carseats.H[-train, ]
+
+High.test = High[-train]
+```
+
+First, we build a classification tree using the training set to predict `High` using all variables except `Sales` (remember that `High` was derived from `Sales`). The tree model (see below) shows the variables that are actually used to construct the tree. The algorithm has determined that the other variables did not contribute to the predictive power of the model. From the model we can see that the most important indicator of `Sales` appears to be shelving location, since the first branch differentiates `Good` locations from `Bad` and `Medium` locations. The next important indicator is `Price`, since the second branch differentiates a price greater than or equal to \$92.5 versus a price less than \$92.5.
+
+```{r}
+# cp or complexity parameter determines how deep the tree will grow. Here it is
+# assigned a small value which will allow a decision on further pruning. That is,
+# we want a cp value (with a more parsimonious tree) that minimizes the xerror
+# (cross-validation error).
+
+fit.tree = rpart(High ~ ., data = Carseats.train, method = "class", cp = 0.008)
+fit.tree
+```
+
+> **Note:** The `method =` argument can be modified and selection depends on the type of response variable. It is `class` for categorical/factor, `anova` for numerical, `poisson` for count, and `exp` for survival data. `cp = "value"` is assigned a numeric value that will determine how deep you want your tree to grow. The smaller the value (closer to 0), the larger the tree. The default value is 0.01, which will render a very pruned tree.
+
+**Decision Tree terminology and output items:**
+
+-   **Root Node:** Represents the entire sample population and is further divided into two or more homogeneous groups.
+-   **split:** The criterion used to divide a node into two or more sub-nodes.
+-   **n:** The number of observations in a node.
+-   **loss:** This is the total number of rows that will be misclassified if the predicted class for the node is applied to all rows.
+-   **yval:** The overall prediction for the branch (`Yes` or `No`). In general, this is the mean response value for that subset.
+-   **yprob:** The fraction of observations in that branch that take on values of `Yes` and `No`.
+-   **Pruning:** The process of removing sub-nodes from a decision node. Pruning is a fix for the problem of overfitting.
+-   **Complexity:** The complexity parameter is used to establish a control level that determines whether a split contributes to a better model fit. Any split that increases the model fit by a factor greater than the defined complexity factor is attempted. The best cp value has the lowest cross-validation error (xerror).
+
+### Visualize the Classification Tree
+
+Next, take a look at a plot of the tree. The tree selected contains 4 variables with 5 splits. If you look at the plot and at the node descriptions, you will notice that splits have occurred on the variables `ShelveLoc`, `Price`, `Advertising`, and `Age`. Using the output table (above) and the plot (below), let's interpret the tree model. Nodes 2 and 3 were formed by splitting node 1, the root node, on the predictor variable `ShelveLoc`. The split point is `ShelveLoc=Bad,Medium`; that is, node 2 consists of all rows with the value of `ShelveLoc=Bad,Medium` and node 3 consists of all rows with `ShelveLoc=Good`. The predicted class for node 2 is `No`, where `No` indicates sales less than or equal to \$8k. The expected loss is 52 — this is the total number of rows that will be misclassified if the predicted class for the node is applied to all rows. Specifically, out of the total 154 cases, 52 (34%) will be misclassified and 102 (66%) will be classified correctly. The predicted class for node 3 is `Yes`, where `Yes` indicates sales greater than \$8k. The expected loss is 8 — that is, 8 rows will be misclassified if the predicted class for the node is applied to all rows. Again, out of the total 46 cases, 8 (17%) will be misclassified and 38 (83%) will be classified correctly.
+
+```{r}
+# Visualizing the unpruned tree
+rpart.plot(fit.tree)
+```
+
+```{r}
+# Checking the order of variable importance
+fit.tree$variable.importance
+```
+
+### Predict Using the Classification Tree
+
+We then use the decision tree model that was built using training data to predict the response variable, `High`, using the test data set. Here we use the `predict()` function for this purpose. It is important to note that while this model may produce good predictions on the training set, it is likely to overfit the data, leading to poor test set performance. That is, the resulting tree may be too complex. However, a smaller tree with fewer splits might lead to lower variance and better interpretation at the cost of a little bias. As a general rule, as we use more flexible methods, the variance will increase and the bias will decrease. Pruning reduces model flexibility. Later we will consider whether pruning this tree improves performance as measured by the test set error rate. A lower test error rate means better performance.
+
+```{r}
+pred.tree = predict(fit.tree, Carseats.test, type = "class")
+```
+
+### Evaluate the Performance of the Classification Tree
+
+To determine how well the decision-tree model performs on the test set, we run a cross-tabulation of the predicted versus actual values. From this, we see that the misclassification error rate is 24%, calculated as (32+16)/200. This means that the model leads to correct predictions for 76% of the observations in the test data set; this is calculated as (110+42)/200.
+
+```{r}
+table(pred.tree, High.test)
+```
+
+Next, we consider whether pruning the tree might lead to improved results. That is, we want to see if pruning will result in a lower percent misclassification error rate and, therefore a higher percent correct predictions. Pruning selects the cp (complexity parameter) value associated with a shorter tree that minimizes the cross-validated error rate (xerror). See the table below. We refer to the CP table to select the cp value that produces the lowest cross-validation error (xerror). Referring to the table, we can choose or explicitly request the lowest cp value. The lowest cp value is 0.0333333 and has a tree with 3 splits.
+
+```{r}
+#plotcp(fit.tree)
+printcp(fit.tree)
+```
+
+```{r}
+# Explicitly request the lowest cp value
+fit.tree$cptable[which.min(fit.tree$cptable[, "xerror"]), "CP"]
+```
+
+Applying the pruned tree, the tree with the lowest cp value, to the model that was built using the training data set. The pruned tree model contains three variables with 3 splits.
+
+```{r}
+bestcp <- fit.tree$cptable[which.min(fit.tree$cptable[, "xerror"]), "CP"]
+pruned.tree <- prune(fit.tree, cp = bestcp)
+rpart.plot(pruned.tree)
+```
+
+### Use the Pruned Tree to Predict the Test Data and Evaluate Tree Performance
+
+We now apply the pruned tree to the test data. Now only 74% of the test observations are correctly classified, thus the misclassification error rate is 26%. In contrast, our unpruned tree has a misclassification error rate of 24%. Therefore, the pruned model results in an increase in bias as measured by the test error rate. As a result, we would select the larger, unpruned tree since the test error rate is lower than the test error rate of the pruned tree. Remember that a good classifier is one for which the test error is smallest. This example shows that pruning is not always effective in reducing bias. It is important to note that we could choose the pruned tree if interpretability is more important than a lower bias.
+
+```{r}
+# Alternate specification
+pred.prune = predict(pruned.tree, Carseats.test, type = "class")
+```
+
+```{r}
+table(pred.prune, High.test)
+```
+
+------------------------------------------------------------------------
+
+## Part II: Fit A Regression Tree
+
+In this section, we will use a regression tree to analyze the `Carseats` data set. As before, we are interested in predicting `Sales` based on the other variables in the data set. Because `Sales` is a continuous variable, this is a regression problem and requires the use of a regression tree. Like before, we split the data into a training set and a test set, build the tree using the training set and evaluate its performance on the test data.
+
+```{r}
+# Remove the High variable from the data.
+Carseats.S <- Carseats[, -12]
+
+set.seed(234)
+train = sample(1:nrow(Carseats.S), 200)
+Carseats.train = Carseats.S[train, ]
+Carseats.test  = Carseats.S[-train, ]
+```
+
+```{r}
+# Build the regression tree on the training set
+fit.tree = rpart(Sales ~ ., data = Carseats.train, method = "anova", cp = 0.008)
+#summary(fit.tree)
+fit.tree
+```
+
+### Visualize the Regression Tree
+
+Next, take a look at a plot of the tree. The regression tree contains 6 variables with 16 splits. Splits have occurred on the variables `ShelveLoc`, `Price`, `CompPrice`, `Advertising`, `Income`, and `Age`.
+
+```{r}
+rpart.plot(fit.tree)
+```
+
+```{r}
+fit.tree$variable.importance
+```
+
+### Predict Using the Regression Tree and Evaluate Performance
+
+```{r}
+pred.tree = predict(fit.tree, Carseats.test)
+```
+
+```{r}
+# Calculate the mean square error
+mse <- mean((pred.tree - Carseats.test$Sales)^2)
+mse
+```
+
+### Prune the Regression Tree and Use it to Predict the Test Data
+
+We prune or trim the tree by choosing the best CP value based on the lowest cross-validation error (xerror) from the CP table. From the CP table it is observed that 0.0396043 is the lowest xerror and renders a tree with 4 splits. Alternatively, instead of printing the table, we can explicitly ask for the best CP value. A plot of the pruned tree appears below.
+
+```{r}
+# Finding the best CP value
+printcp(fit.tree)
+```
+
+```{r}
+bestcp <- fit.tree$cptable[which.min(fit.tree$cptable[, "xerror"]), "CP"]
+bestcp
+```
+
+```{r}
+# Prune the tree with the best cp value (the lowest cross-validation error - xerror)
+pruned.tree <- prune(fit.tree, cp = bestcp)
+```
+
+```{r}
+# Visualizing the pruned tree
+rpart.plot(pruned.tree)
+```
+
+```{r}
+# Checking the order of variable importance
+pruned.tree$variable.importance
+```
+
+### Evaluate the Performance of the Pruned Regression Tree
+
+A good estimator is one for which the test error is smallest. To determine how well the decision-tree model performs on the test set, we calculate the mean square error (MSE). The MSE is a performance metric for regression models. A model having a low MSE is the best.
+
+```{r}
+# Use the test data to evaluate performance of pruned regression tree
+pred.prune = predict(pruned.tree, Carseats.test)
+
+# Calculate the MSE for the pruned tree
+mse <- mean((pred.prune - Carseats.test$Sales)^2)
+mse
+```
+
+The MSE value for the pruned tree is more than the MSE value for the original tree. In this case, pruning the tree did not reduce the MSE value, therefore our first tree is the better tree. Again, this example shows that pruning is not always effective in reducing bias. Although the unpruned tree renders the smallest MSE, it is more complicated to interpret. If interpretability is more important, then we would choose the pruned model.
+
+------------------------------------------------------------------------
+
+## Appendix
+
+### Advantages and Disadvantages of Decision Trees
+
+**Advantages**
+
+-   If there is high non-linearity & a complex relationship between the dependent and independent variables, then a tree model will outperform other classical linear regression models (such as LMs, GLMs, or GAMs).
+-   Trees are very easy to explain and even simpler to interpret than linear regression.
+-   It is believed that decision trees more closely mirror human decision-making than do classical regression approaches.
+-   Trees can be displayed graphically, and are easily interpreted even by a non-expert.
+-   Trees can handle data of different types, including continuous, categorical, ordinal, and binary. Transformations of the data are not required. For example, trees can easily handle qualitative predictors without the need to create dummy variables.
+-   Trees can be useful for detecting important variables, interactions, and identifying outliers. The larger the number of variables, the more valuable is the exploration using decision trees.
+-   Can handle missing data by identifying surrogate splits in the modeling process.
+-   Records with missing values are omitted by default.
+
+**Disadvantages**
+
+-   Trees generally do not have the same level of predictive accuracy as some of the other regression and classification approaches.
+-   Tree models have a tendency to overfit, that is, the error is fitted along with the data, and thus lead to over-interpretation.
+-   Trees can be very non-robust. That is, a small change in the data can cause a large change in the final estimated tree.
+
+> **Note:** The predictive performance of trees can be substantially improved by aggregating many trees using methods like **bagging**, **random forests**, and **boosting**.

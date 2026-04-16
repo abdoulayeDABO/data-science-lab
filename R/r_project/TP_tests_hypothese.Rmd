@@ -1,0 +1,533 @@
+---
+title: "TP — Tests d'hypothèse & Significativité"
+subtitle: "Avec de vrais jeux de données R"
+author: "Travail Pratique"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 3
+    theme: flatly
+    highlight: tango
+    number_sections: true
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo    = TRUE,
+  warning = FALSE,
+  message = FALSE,
+  fig.align = "center",
+  fig.width = 7,
+  fig.height = 4.5
+)
+```
+
+```{r librairies}
+library(tidyverse)   # manipulation & visualisation
+library(ggplot2)     # graphiques
+library(knitr)       # tableaux propres
+library(kableExtra)  # mise en forme tableaux
+```
+
+---
+
+# Rappel théorique rapide
+
+Un **test d'hypothèse** suit toujours la même logique :
+
+| Étape | Ce qu'on fait |
+|-------|--------------|
+| 1 | Poser **H₀** (hypothèse nulle) et **H₁** (hypothèse alternative) |
+| 2 | Choisir le **seuil α** (risque d'erreur de type I, souvent 0.05) |
+| 3 | Calculer la **statistique de test** (t, F, χ², …) |
+| 4 | Obtenir la **p-valeur** |
+| 5 | **Décider** : si p < α → on rejette H₀ |
+
+> **Rappel clé :** Une p-valeur ne dit pas que H₀ est vraie ou fausse.  
+> Elle dit : *"Si H₀ était vraie, quelle serait la probabilité d'observer un résultat aussi extrême ?"*
+
+---
+
+# Test t de Student — comparer deux moyennes
+
+## Dataset `sleep` — Effet de somnifères
+
+Le dataset `sleep` (intégré à R) contient les **heures de sommeil supplémentaires** obtenues par 10 patients sous deux médicaments différents (groupe 1 et groupe 2).
+
+```{r sleep-apercu}
+data(sleep)
+# View(sleep) 
+
+sleep %>%
+  group_by(group) %>%
+  summarise(
+    n        = n(),
+    Moyenne  = round(mean(extra), 2),
+    Ecart_type = round(sd(extra), 2),
+    Min      = min(extra),
+    Max      = max(extra)
+  ) %>%
+  kable(caption = "Statistiques descriptives — Dataset sleep") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"), full_width = FALSE)
+```
+
+## Visualisation
+
+```{r sleep-viz}
+ggplot(sleep, aes(x = group, y = extra, fill = group)) +
+  geom_boxplot(alpha = 0.6, width = 0.4) +
+  geom_jitter(width = 0.08, size = 2.5, alpha = 0.8, color = "gray30") +
+  scale_fill_manual(values = c("#AFA9EC", "#5DCAA5")) +
+  labs(
+    title    = "Heures de sommeil supplémentaires par médicament",
+    subtitle = "Dataset sleep (n = 10 par groupe)",
+    x        = "Médicament (groupe)",
+    y        = "Heures supplémentaires",
+    fill     = "Groupe"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(legend.position = "none")
+```
+
+## Test t apparié (paired t-test)
+
+Les mêmes 10 patients ont testé les deux médicaments → données **appariées**.
+
+$$t = \frac{\bar{d}}{s_d / \sqrt{n}}$$
+
+- **H₀** : La différence moyenne entre les deux médicaments est nulle (μ_d = 0)  
+- **H₁** : La différence moyenne est ≠ 0 (test bilatéral)
+
+```{r sleep-ttest}
+res_sleep <- t.test(
+  sleep$extra[sleep$group == 1],
+  sleep$extra[sleep$group == 2],
+  paired = TRUE
+)
+print(res_sleep)
+```
+
+### Interprétation
+
+```{r sleep-interp}
+p  <- res_sleep$p.value
+ic <- res_sleep$conf.int
+
+cat(sprintf(
+  "p-valeur        : %.4f\n
+Intervalle de confiance 95%% : [%.3f ; %.3f]\n
+Conclusion : %s",
+  p, ic[1], ic[2],
+  ifelse(p < 0.05,
+    "p < 0.05 → On REJETTE H₀. Le médicament 2 apporte significativement plus de sommeil.",
+    "p ≥ 0.05 → On ne rejette pas H₀. Aucune différence significative détectée.")
+))
+```
+
+> **Ce que ça veut dire concrètement :** Il y a seulement `r round(res_sleep$p.value * 100, 2)`% de chances d'observer une différence aussi grande *par hasard* si les deux médicaments étaient identiques.
+
+---
+
+# Test t indépendant — Dataset `iris`
+
+## Objectif
+
+Comparer la longueur des sépales entre *Iris setosa* et *Iris versicolor*.
+
+```{r iris-filtre}
+iris_sub <- iris %>%
+  filter(Species %in% c("setosa", "versicolor"))
+
+iris_sub %>%
+  group_by(Species) %>%
+  summarise(
+    n          = n(),
+    Moyenne    = round(mean(Sepal.Length), 2),
+    Ecart_type = round(sd(Sepal.Length), 2)
+  ) %>%
+  kable(caption = "Longueur des sépales — Iris setosa vs versicolor") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"), full_width = FALSE)
+```
+
+## Visualisation
+
+```{r iris-viz}
+ggplot(iris_sub, aes(x = Sepal.Length, fill = Species)) +
+  geom_histogram(binwidth = 0.2, alpha = 0.7, position = "identity", color = "white") +
+  scale_fill_manual(values = c("#534AB7", "#1D9E75")) +
+  geom_vline(
+    data = iris_sub %>% group_by(Species) %>% summarise(m = mean(Sepal.Length)),
+    aes(xintercept = m, color = Species), linewidth = 1.2, linetype = "dashed"
+  ) +
+  scale_color_manual(values = c("#3C3489", "#0F6E56")) +
+  labs(
+    title    = "Distribution de la longueur des sépales",
+    subtitle = "Lignes pointillées = moyennes",
+    x        = "Longueur sépale (cm)",
+    y        = "Effectif",
+    fill     = "Espèce"
+  ) +
+  theme_minimal(base_size = 13)
+```
+
+## Vérification des conditions du test t
+
+### 1. Normalité — Test de Shapiro-Wilk
+
+```{r shapiro}
+iris_sub %>%
+  group_by(Species) %>%
+  summarise(
+    stat_W  = round(shapiro.test(Sepal.Length)$statistic, 4),
+    p_value = round(shapiro.test(Sepal.Length)$p.value, 4),
+    Normal  = ifelse(shapiro.test(Sepal.Length)$p.value > 0.05, "✓ Oui", "✗ Non")
+  ) %>%
+  kable(caption = "Test de Shapiro-Wilk (H₀ : distribution normale)") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"), full_width = FALSE)
+```
+
+### 2. Égalité des variances — Test de Levene
+
+```{r levene}
+levene <- var.test(Sepal.Length ~ Species, data = iris_sub)
+cat(sprintf(
+  "Test F de Levene\np-valeur = %.4f → Variances %s\n",
+  levene$p.value,
+  ifelse(levene$p.value > 0.05, "HOMOGÈNES (var.equal = TRUE)", "HÉTÉROGÈNES → test de Welch")
+))
+```
+
+## Test t de Welch (var.equal selon résultat ci-dessus)
+
+```{r iris-ttest}
+res_iris <- t.test(Sepal.Length ~ Species, data = iris_sub, var.equal = FALSE)
+print(res_iris)
+```
+
+```{r iris-viz-pval}
+# Visualisation de la zone de rejet
+df_t <- data.frame(x = seq(-6, 6, length.out = 500))
+df_t$y <- dt(df_t$x, df = res_iris$parameter)
+
+t_obs   <- res_iris$statistic
+t_crit  <- qt(0.975, df = res_iris$parameter)
+
+ggplot(df_t, aes(x = x, y = y)) +
+  geom_line(color = "#534AB7", linewidth = 1) +
+  # Zone de rejet gauche
+  geom_area(data = filter(df_t, x <= -t_crit), fill = "#E24B4A", alpha = 0.3) +
+  # Zone de rejet droite
+  geom_area(data = filter(df_t, x >= t_crit), fill = "#E24B4A", alpha = 0.3) +
+  # Statistique observée
+  geom_vline(xintercept = t_obs, color = "#1D9E75", linewidth = 1.2, linetype = "dashed") +
+  annotate("text", x = t_obs + 0.4, y = 0.35, label = paste0("t obs = ", round(t_obs, 2)),
+           color = "#0F6E56", size = 3.5, hjust = 0) +
+  annotate("text", x = 4.2, y = 0.05, label = "Zone de\nrejet (α/2)", color = "#A32D2D", size = 3) +
+  annotate("text", x = -4.8, y = 0.05, label = "Zone de\nrejet (α/2)", color = "#A32D2D", size = 3) +
+  labs(
+    title    = "Distribution t sous H₀ — test bilatéral",
+    subtitle = paste0("p-valeur = ", formatC(res_iris$p.value, format = "e", digits = 2)),
+    x        = "Statistique t",
+    y        = "Densité"
+  ) +
+  theme_minimal(base_size = 13)
+```
+
+> **Conclusion :** p = `r formatC(res_iris$p.value, format = "e", digits = 2)` ≪ 0.05.  
+> La différence de longueur des sépales entre les deux espèces est **hautement significative**.
+
+---
+
+# Test du Chi-deux χ² — variables catégorielles
+
+## Dataset `mtcars` — Cylindrée et transmission
+
+On veut savoir si le **type de transmission** (automatique/manuelle) est lié au **nombre de cylindres**.
+
+- **H₀** : Transmission et cylindrée sont **indépendantes**  
+- **H₁** : Il existe une **association** entre les deux variables
+
+```{r chisq-table}
+mtcars2 <- mtcars %>%
+  mutate(
+    am  = factor(am,  labels = c("Automatique", "Manuelle")),
+    cyl = factor(cyl, labels = c("4 cyl", "6 cyl", "8 cyl"))
+  )
+
+tab <- table(mtcars2$cyl, mtcars2$am)
+
+kable(
+  addmargins(tab),
+  caption = "Table de contingence : Cylindrée × Transmission"
+) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"), full_width = FALSE)
+```
+
+## Visualisation
+
+```{r chisq-viz}
+as.data.frame(tab) %>%
+  rename(Cylindres = Var1, Transmission = Var2, Effectif = Freq) %>%
+  ggplot(aes(x = Cylindres, y = Effectif, fill = Transmission)) +
+  geom_col(position = "dodge", alpha = 0.85, width = 0.6) +
+  scale_fill_manual(values = c("#534AB7", "#1D9E75")) +
+  geom_text(aes(label = Effectif), position = position_dodge(width = 0.6),
+            vjust = -0.5, size = 3.5) +
+  labs(
+    title = "Répartition transmission × cylindrée (mtcars)",
+    x = "Nombre de cylindres", y = "Nombre de véhicules"
+  ) +
+  theme_minimal(base_size = 13)
+```
+
+## Test χ²
+
+```{r chisq-test}
+res_chi <- chisq.test(tab)
+print(res_chi)
+```
+
+### Résidus standardisés (qui contribue le plus ?)
+
+```{r chisq-residus}
+round(res_chi$residuals, 2) %>%
+  kable(caption = "Résidus standardisés — valeurs > |2| sont remarquables") %>%
+  kable_styling(bootstrap_options = c("striped","hover"), full_width = FALSE)
+```
+
+> Un résidu **> +2** signifie que la cellule est **sur-représentée** par rapport à l'hypothèse d'indépendance.  
+> Un résidu **< -2** signifie qu'elle est **sous-représentée**.
+
+```{r chisq-heatmap}
+as.data.frame(res_chi$residuals) %>%
+  rename(Cylindres = Var1, Transmission = Var2, Residu = Freq) %>%
+  ggplot(aes(x = Transmission, y = Cylindres, fill = Residu)) +
+  geom_tile(color = "white", linewidth = 0.8) +
+  geom_text(aes(label = round(Residu, 2)), size = 4.5, fontface = "bold") +
+  scale_fill_gradient2(
+    low = "#3B8BD4", mid = "white", high = "#E24B4A",
+    midpoint = 0, name = "Résidu\nstandardisé"
+  ) +
+  labs(
+    title = "Carte des résidus standardisés",
+    subtitle = "Rouge = sur-représenté | Bleu = sous-représenté"
+  ) +
+  theme_minimal(base_size = 13)
+```
+
+> **Conclusion :** p = `r round(res_chi$p.value, 4)`.  
+> `r ifelse(res_chi$p.value < 0.05, "On rejette H₀ : il existe une association significative entre cylindrée et transmission.", "On ne rejette pas H₀.")`  
+> Les voitures 8 cylindres sont sur-représentées en automatique.
+
+---
+
+# ANOVA — comparer plus de deux groupes
+
+## Dataset `iris` — Les 3 espèces et longueur des pétales
+
+Avec 3 groupes ou plus, on ne fait pas plusieurs t-tests (risque d'erreur cumulé).  
+On utilise l'**ANOVA** (ANalysis Of VAriance).
+
+- **H₀** : Les moyennes des 3 espèces sont **égales** (μ₁ = μ₂ = μ₃)  
+- **H₁** : Au moins **une moyenne** est différente des autres
+
+```{r anova-desc}
+iris %>%
+  group_by(Species) %>%
+  summarise(
+    n          = n(),
+    Moyenne    = round(mean(Petal.Length), 2),
+    Ecart_type = round(sd(Petal.Length), 2),
+    IC_bas     = round(mean(Petal.Length) - 1.96 * sd(Petal.Length) / sqrt(n()), 2),
+    IC_haut    = round(mean(Petal.Length) + 1.96 * sd(Petal.Length) / sqrt(n()), 2)
+  ) %>%
+  kable(caption = "Longueur des pétales par espèce") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"), full_width = FALSE)
+```
+
+## Visualisation
+
+```{r anova-viz}
+ggplot(iris, aes(x = Species, y = Petal.Length, fill = Species)) +
+  geom_violin(alpha = 0.5, trim = FALSE) +
+  geom_boxplot(width = 0.15, fill = "white", outlier.shape = NA) +
+  geom_jitter(width = 0.05, alpha = 0.3, size = 1.5) +
+  scale_fill_manual(values = c("#534AB7", "#1D9E75", "#D85A30")) +
+  stat_summary(fun = mean, geom = "point", shape = 18, size = 4, color = "black") +
+  labs(
+    title    = "Longueur des pétales — 3 espèces d'Iris",
+    subtitle = "◆ = moyenne | boîte = médiane + IQR | violon = distribution",
+    x = "Espèce", y = "Longueur du pétale (cm)"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(legend.position = "none")
+```
+
+## Modèle ANOVA
+
+```{r anova-test}
+modele_anova <- aov(Petal.Length ~ Species, data = iris)
+summary(modele_anova)
+```
+
+### Décomposition de la variance
+
+```{r anova-r2}
+ss_total   <- sum((iris$Petal.Length - mean(iris$Petal.Length))^2)
+ss_between <- sum(tapply(iris$Petal.Length, iris$Species,
+                         function(x) length(x) * (mean(x) - mean(iris$Petal.Length))^2))
+r2 <- ss_between / ss_total
+
+cat(sprintf(
+  "Variance totale (SS_total)   : %.2f\n
+Variance inter-groupes       : %.2f\n
+R² (proportion expliquée)    : %.1f%%\n
+Conclusion : %.1f%% de la variance de la longueur des pétales\n
+est expliquée par l'espèce.",
+  ss_total, ss_between, r2 * 100, r2 * 100
+))
+```
+
+## Test post-hoc de Tukey — Quelle(s) paire(s) diffèrent ?
+
+L'ANOVA dit qu'il y a *une* différence quelque part, mais pas *où*.  
+Le **test de Tukey** compare toutes les paires en contrôlant le risque global.
+
+```{r tukey}
+tukey_res <- TukeyHSD(modele_anova)
+print(tukey_res)
+```
+
+```{r tukey-viz}
+as.data.frame(tukey_res$Species) %>%
+  rownames_to_column("Comparaison") %>%
+  ggplot(aes(x = Comparaison, y = diff, ymin = lwr, ymax = upr, color = `p adj` < 0.05)) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "gray60") +
+  geom_errorbar(width = 0.2, linewidth = 1.2) +
+  geom_point(size = 4) +
+  scale_color_manual(
+    values = c("TRUE" = "#1D9E75", "FALSE" = "#E24B4A"),
+    labels = c("TRUE" = "Significatif (p < 0.05)", "FALSE" = "Non significatif"),
+    name   = ""
+  ) +
+  coord_flip() +
+  labs(
+    title    = "Intervalles de confiance de Tukey",
+    subtitle = "Si l'IC ne croise pas 0 → différence significative",
+    x = "", y = "Différence de moyennes (cm)"
+  ) +
+  theme_minimal(base_size = 13)
+```
+
+> **Conclusion :** Les 3 paires sont significativement différentes.  
+> La plus grande différence est entre *virginica* et *setosa* (≈ 4.09 cm).
+
+---
+
+# Test de corrélation — Dataset `mtcars`
+
+## Lien entre poids et consommation
+
+- **H₀** : Corrélation nulle entre le poids (`wt`) et la consommation (`mpg`) (ρ = 0)  
+- **H₁** : Corrélation ≠ 0
+
+```{r cor-viz}
+ggplot(mtcars, aes(x = wt, y = mpg)) +
+  geom_point(size = 3, alpha = 0.7, color = "#534AB7") +
+  geom_smooth(method = "lm", se = TRUE, color = "#D85A30", fill = "#FAECE7") +
+  labs(
+    title    = "Poids vs Consommation (mtcars)",
+    subtitle = "Droite de régression avec IC à 95 %",
+    x = "Poids (1000 lbs)", y = "Miles par gallon (mpg)"
+  ) +
+  theme_minimal(base_size = 13)
+```
+
+```{r cor-test}
+res_cor <- cor.test(mtcars$wt, mtcars$mpg, method = "pearson")
+print(res_cor)
+```
+
+```{r cor-interp}
+cat(sprintf(
+  "Corrélation de Pearson r = %.3f\n
+p-valeur = %.2e\n
+IC 95%% = [%.3f ; %.3f]\n\n
+Interprétation :\n
+%s\n
+La corrélation est %s et %s.",
+  res_cor$estimate,
+  res_cor$p.value,
+  res_cor$conf.int[1],
+  res_cor$conf.int[2],
+  ifelse(res_cor$estimate < 0, "Corrélation NÉGATIVE : quand le poids augmente, la consommation en miles/gallon diminue.", ""),
+  case_when(
+    abs(res_cor$estimate) > 0.7 ~ "FORTE",
+    abs(res_cor$estimate) > 0.4 ~ "MODÉRÉE",
+    TRUE ~ "FAIBLE"
+  ),
+  ifelse(res_cor$p.value < 0.05, "SIGNIFICATIVE (p < 0.05)", "NON SIGNIFICATIVE")
+))
+```
+
+---
+
+# Récapitulatif — Quel test choisir ?
+
+```{r recap, echo=FALSE}
+recap <- data.frame(
+  Situation = c(
+    "Comparer une moyenne à une valeur de référence",
+    "Comparer 2 groupes indépendants",
+    "Comparer 2 mesures sur les mêmes sujets",
+    "Comparer 3+ groupes",
+    "Tester l'indépendance de 2 variables catégorielles",
+    "Tester une corrélation linéaire"
+  ),
+  Test = c(
+    "t-test à un échantillon",
+    "t-test de Welch (indépendant)",
+    "t-test apparié",
+    "ANOVA + post-hoc Tukey",
+    "Chi-deux (χ²)",
+    "Corrélation de Pearson"
+  ),
+  Fonction_R = c(
+    "t.test(x, mu = val)",
+    "t.test(y ~ groupe, var.equal = FALSE)",
+    "t.test(avant, après, paired = TRUE)",
+    "aov(y ~ groupe) + TukeyHSD()",
+    "chisq.test(table(A, B))",
+    "cor.test(x, y)"
+  ),
+  Dataset_exemple = c(
+    "—",
+    "iris",
+    "sleep",
+    "iris",
+    "mtcars",
+    "mtcars"
+  )
+)
+
+kable(recap, caption = "Guide de sélection des tests") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "bordered"), full_width = TRUE) %>%
+  column_spec(3, monospace = TRUE, background = "#f8f8f8")
+```
+
+---
+
+# Conclusion & Points clés à retenir
+
+> 1. **La p-valeur n'est pas la probabilité que H₀ soit vraie.** C'est la probabilité des données sous H₀.  
+> 2. **Significatif ≠ important.** Avec un grand n, même une différence infime devient significative. Regardez aussi la **taille d'effet** (Cohen's d, η², r).  
+> 3. **Vérifiez toujours les conditions** (normalité, homogénéité des variances) avant d'appliquer un test.  
+> 4. **L'ANOVA seule ne dit pas qui diffère.** Il faut un test post-hoc (Tukey, Bonferroni…).  
+> 5. **Le seuil α = 0.05 est une convention**, pas une loi physique. Dans certains domaines (médecine, physique des particules), on utilise 0.01 ou 0.001.
+
+---
+
+*Document généré avec R `r R.version.string` et RMarkdown.*
